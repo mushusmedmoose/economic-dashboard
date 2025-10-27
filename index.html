@@ -135,7 +135,13 @@
 
     canvas {
       width: 100%;
+      max-height: 400px;
+    }
+    
+    .chart-container {
+      position: relative;
       height: 400px;
+      width: 100%;
     }
 
     footer {
@@ -191,7 +197,9 @@
     <div class="chart-panel">
       <h2>U.S. Treasury Yield Curve</h2>
       <div id="dateInfo">Loading latest data...</div>
-      <canvas id="yieldCurveChart"></canvas>
+      <div class="chart-container">
+        <canvas id="yieldCurveChart"></canvas>
+      </div>
       <footer>Data Source: FRED (Federal Reserve Economic Data)</footer>
     </div>
   </div>
@@ -349,7 +357,8 @@
           },
           options: {
             responsive: true,
-            maintainAspectRatio: false,
+            maintainAspectRatio: true,
+            aspectRatio: 2,
             scales: {
               x: {
                 type: "linear",
