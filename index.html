@@ -134,14 +134,17 @@
     }
 
     canvas {
-      width: 100%;
-      max-height: 400px;
+      width: 100% !important;
+      max-height: 400px !important;
+      height: 400px !important;
     }
     
     .chart-container {
       position: relative;
-      height: 400px;
+      height: 400px !important;
       width: 100%;
+      max-height: 400px !important;
+      overflow: hidden;
     }
 
     footer {
@@ -357,8 +360,7 @@
           },
           options: {
             responsive: true,
-            maintainAspectRatio: true,
-            aspectRatio: 2,
+            maintainAspectRatio: false,
             scales: {
               x: {
                 type: "linear",
