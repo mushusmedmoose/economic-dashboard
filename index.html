@@ -111,9 +111,6 @@
       margin-right: 8px;
     }
 
-
-
-    /* === YIELD CURVE PANEL === */
     .chart-panel {
       background: white;
       border-radius: 20px;
@@ -147,11 +144,26 @@
       font-size: 0.9rem;
       color: #555;
     }
+
+    .error-message {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      color: #856404;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    .loading {
+      text-align: center;
+      color: #666;
+      padding: 20px;
+    }
   </style>
 </head>
 <body>
   <div class="wrapper">
-    <!-- LEFT SIDE -->
     <div class="container">
       <h1>📈 Economic Indicators Hub</h1>
 
@@ -174,11 +186,8 @@
           <li>Consumer Spending</li>
         </ul>
       </div>
-
-      
     </div>
 
-    <!-- RIGHT SIDE: YIELD CURVE -->
     <div class="chart-panel">
       <h2>U.S. Treasury Yield Curve</h2>
       <div id="dateInfo">Loading latest data...</div>
@@ -188,7 +197,6 @@
   </div>
 
   <script>
-    // === INDICATOR LINKS ===
     const indicatorLinks = {
       vix: 'https://finance.yahoo.com/quote/%5EVIX/',
       sp500: 'https://finance.yahoo.com/quote/%5EGSPC/',
@@ -206,11 +214,15 @@
       });
     }
 
-    // === YIELD CURVE SCRIPT ===
     const FRED_API_KEY = "bf5290640cc15ab82de3defde1251c41";
     const FRED_BASE = "https://api.stlouisfed.org/fred/series/observations";
-    const PROXY = "https://api.allorigins.win/raw?url=";
 
+    const PROXIES = [
+      { name: "corsproxy.io", url: (target) => `https://corsproxy.io/?${encodeURIComponent(target)}` },
+      { name: "allorigins", url: (target) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}` },
+      { name: "thingproxy", url: (target) => `https://thingproxy.freeboard.io/fetch/${encodeURIComponent(target)}` },
+      { name: "direct", url: (target) => target }
+    ];
 
     const series = [
       { label: "1M", id: "DGS1MO", months: 1 },
@@ -224,11 +236,54 @@
       { label: "10Y", id: "DGS10", months: 120 }
     ];
 
+    let workingProxy = null;
+
+    async function fetchWithProxy(url, proxyConfig) {
+      const proxyUrl = proxyConfig.url(url);
+      const response = await fetch(proxyUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const text = await response.text();
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        if (text.includes('contents')) {
+          const parsed = JSON.parse(text);
+          data = JSON.parse(parsed.contents);
+        } else {
+          throw new Error('Invalid JSON response');
+        }
+      }
+      
+      return data;
+    }
+
     async function fetchFRED(seriesId) {
-      const url = `${FRED_BASE}?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=1`;
-      const response = await fetch(PROXY + encodeURIComponent(url));
-      const data = await response.json();
-      return JSON.parse(data.contents);
+      const url = `${FRED_BASE}?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=10`;
+      
+      if (workingProxy) {
+        try {
+          return await fetchWithProxy(url, workingProxy);
+        } catch (e) {
+          console.warn(`Working proxy ${workingProxy.name} failed, retrying...`);
+          workingProxy = null;
+        }
+      }
+
+      for (const proxy of PROXIES) {
+        try {
+          console.log(`Trying proxy: ${proxy.name}`);
+          const data = await fetchWithProxy(url, proxy);
+          workingProxy = proxy;
+          console.log(`Success with proxy: ${proxy.name}`);
+          return data;
+        } catch (err) {
+          console.warn(`Proxy ${proxy.name} failed:`, err.message);
+        }
+      }
+      
+      throw new Error('All proxies failed');
     }
 
     async function fetchAllYields() {
@@ -239,80 +294,109 @@
         try {
           const data = await fetchFRED(s.id);
           const obs = data.observations.find(o => o.value !== "." && !isNaN(parseFloat(o.value)));
-          const value = parseFloat(obs.value);
-          const date = obs.date;
-          if (!isNaN(value)) {
-            results.push({ label: s.label, months: s.months, yield: value });
-            if (!latestDate) latestDate = date;
+          
+          if (obs) {
+            const value = parseFloat(obs.value);
+            const date = obs.date;
+            if (!isNaN(value)) {
+              results.push({ label: s.label, months: s.months, yield: value });
+              if (!latestDate) latestDate = date;
+            }
           }
         } catch (err) {
-          console.warn(`Failed to fetch ${s.label}:`, err);
+          console.error(`Failed to fetch ${s.label}:`, err);
         }
       }
+      
       return { results, latestDate };
     }
 
     async function drawYieldCurve() {
-      const { results: yields, latestDate } = await fetchAllYields();
-      const ctx = document.getElementById("yieldCurveChart").getContext("2d");
       const dateInfoEl = document.getElementById("dateInfo");
+      
+      try {
+        dateInfoEl.textContent = "Fetching data...";
+        const { results: yields, latestDate } = await fetchAllYields();
+        
+        if (yields.length === 0) {
+          throw new Error('No data retrieved');
+        }
 
-      yields.sort((a, b) => a.months - b.months);
-      dateInfoEl.textContent = `As of ${new Date(latestDate).toLocaleDateString("en-US", {
-        year: "numeric", month: "long", day: "numeric"
-      })}`;
+        const ctx = document.getElementById("yieldCurveChart").getContext("2d");
+        yields.sort((a, b) => a.months - b.months);
+        
+        dateInfoEl.textContent = `As of ${new Date(latestDate).toLocaleDateString("en-US", {
+          year: "numeric", month: "long", day: "numeric"
+        })}`;
 
-      const tickValues = series.map(s => s.months);
-      const tickLabels = series.map(s => s.label);
+        const tickValues = series.map(s => s.months);
+        const tickLabels = series.map(s => s.label);
 
-      new Chart(ctx, {
-        type: "line",
-        data: {
-          datasets: [{
-            label: "Yield (%)",
-            data: yields.map(d => ({ x: d.months, y: d.yield })),
-            borderColor: "#1f77b4",
-            backgroundColor: "rgba(31,119,180,0.15)",
-            tension: 0.3,
-            pointRadius: 6,
-            pointHoverRadius: 8,
-            pointBackgroundColor: "#1f77b4"
-          }]
-        },
-        options: {
-          scales: {
-            x: {
-              type: "linear",
-              title: { display: true, text: "Maturity" },
-              min: 0,
-              max: 130,
-              ticks: {
-                values: tickValues,
-                callback: function(value) {
-                  const i = tickValues.indexOf(value);
-                  return i !== -1 ? tickLabels[i] : "";
-                },
-                autoSkip: false
-              },
-              grid: { drawTicks: false }
-            },
-            y: {
-              title: { display: true, text: "Yield (%)" },
-              beginAtZero: false,
-              grid: { color: "rgba(0,0,0,0.1)" }
-            }
+        new Chart(ctx, {
+          type: "line",
+          data: {
+            datasets: [{
+              label: "Yield (%)",
+              data: yields.map(d => ({ x: d.months, y: d.yield })),
+              borderColor: "#1f77b4",
+              backgroundColor: "rgba(31,119,180,0.15)",
+              tension: 0.3,
+              pointRadius: 6,
+              pointHoverRadius: 8,
+              pointBackgroundColor: "#1f77b4",
+              fill: true
+            }]
           },
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                title: (ctx) => `Maturity: ${ctx[0].raw.x} months`,
-                label: (ctx) => `Yield: ${ctx.raw.y}%`
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                type: "linear",
+                title: { display: true, text: "Maturity", font: { size: 14 } },
+                min: 0,
+                max: 130,
+                ticks: {
+                  values: tickValues,
+                  callback: function(value) {
+                    const i = tickValues.indexOf(value);
+                    return i !== -1 ? tickLabels[i] : "";
+                  },
+                  autoSkip: false
+                },
+                grid: { drawTicks: false }
+              },
+              y: {
+                title: { display: true, text: "Yield (%)", font: { size: 14 } },
+                beginAtZero: false,
+                grid: { color: "rgba(0,0,0,0.1)" }
+              }
+            },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  title: (ctx) => {
+                    const months = ctx[0].raw.x;
+                    const label = series.find(s => s.months === months)?.label || `${months}M`;
+                    return `Maturity: ${label}`;
+                  },
+                  label: (ctx) => `Yield: ${ctx.raw.y.toFixed(2)}%`
+                }
               }
             }
           }
-        }
-      });
+        });
+      } catch (err) {
+        console.error('Failed to draw yield curve:', err);
+        dateInfoEl.innerHTML = `
+          <div class="error-message">
+            ⚠️ Unable to load yield curve data.<br>
+            <small>This may be due to CORS restrictions. Please visit 
+            <a href="https://fred.stlouisfed.org/series/DGS10" target="_blank">FRED directly</a> for the latest data.</small>
+          </div>
+        `;
+      }
     }
 
     drawYieldCurve();
