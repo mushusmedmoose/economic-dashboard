@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Economic Indicators Hub</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .wrapper {
+      display: flex;
+      gap: 40px;
+      align-items: flex-start;
+      justify-content: center;
+      max-width: 1300px;
+      width: 100%;
+      flex-wrap: wrap;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+      width: 100%;
+      flex: 1;
+    }
+
+    h1 {
+      color: #333;
+      text-align: center;
+      margin-bottom: 40px;
+      font-size: 2.2em;
+    }
+
+    .button-group {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      margin-bottom: 40px;
+    }
+
+    .main-button {
+      padding: 18px 30px;
+      font-size: 1.2em;
+      font-weight: 600;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .main-button:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .indicator-list {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 30px;
+    }
+
+    .indicator-list h3 {
+      color: #333;
+      margin-bottom: 15px;
+      font-size: 1.1em;
+    }
+
+    .indicator-list ul {
+      list-style: none;
+      padding-left: 0;
+    }
+
+    .indicator-list li {
+      padding: 8px 0;
+      color: #555;
+      font-size: 0.95em;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .indicator-list li:last-child {
+      border-bottom: none;
+    }
+
+    .indicator-list li::before {
+      content: "📊 ";
+      margin-right: 8px;
+    }
+
+
+
+    /* === YIELD CURVE PANEL === */
+    .chart-panel {
+      background: white;
+      border-radius: 20px;
+      padding: 30px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      flex: 1;
+      max-width: 700px;
+    }
+
+    .chart-panel h2 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    #dateInfo {
+      text-align: center;
+      color: #666;
+      margin-bottom: 25px;
+      font-size: 0.9rem;
+    }
+
+    canvas {
+      width: 100%;
+      height: 400px;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 15px;
+      font-size: 0.9rem;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <!-- LEFT SIDE -->
+    <div class="container">
+      <h1>📈 Economic Indicators Hub</h1>
+
+      <div class="button-group">
+        <button class="main-button btn-primary" onclick="openAllIndicators()">
+          🚀 Open All Indicators
+        </button>
+      </div>
+
+      <div class="indicator-list">
+        <h3>Indicators that will open:</h3>
+        <ul>
+          <li>VIX - Volatility Index</li>
+          <li>Put/Call Ratio (PCR)</li>
+          <li>CNN Fear & Greed Index</li>
+          <li>AAII Investor Sentiment Survey</li>
+          <li>Yield Curve / Term Spread</li>
+          <li>Credit Spreads</li>
+          <li>Unemployment Rate</li>
+          <li>Consumer Spending</li>
+        </ul>
+      </div>
+
+      
+    </div>
+
+    <!-- RIGHT SIDE: YIELD CURVE -->
+    <div class="chart-panel">
+      <h2>U.S. Treasury Yield Curve</h2>
+      <div id="dateInfo">Loading latest data...</div>
+      <canvas id="yieldCurveChart"></canvas>
+      <footer>Data Source: FRED (Federal Reserve Economic Data)</footer>
+    </div>
+  </div>
+
+  <script>
+    // === INDICATOR LINKS ===
+    const indicatorLinks = {
+      vix: 'https://finance.yahoo.com/quote/%5EVIX/',
+      sp500: 'https://finance.yahoo.com/quote/%5EGSPC/',
+      fearGreed: 'https://edition.cnn.com/markets/fear-and-greed',
+      aaii: 'https://www.aaii.com/sentimentsurvey',
+      yieldCurve: 'https://fred.stlouisfed.org/series/T10Y3M',
+      unemployment: 'https://fred.stlouisfed.org/series/UNRATE',
+      creditSpread: 'https://fred.stlouisfed.org/series/BAMLC0A0CM',
+      consumption: 'https://fred.stlouisfed.org/series/PCEC96'
+    };
+
+    function openAllIndicators() {
+      Object.values(indicatorLinks).forEach(url => {
+        window.open(url, '_blank');
+      });
+    }
+
+    // === YIELD CURVE SCRIPT ===
+    const FRED_API_KEY = "bf5290640cc15ab82de3defde1251c41";
+    const FRED_BASE = "https://api.stlouisfed.org/fred/series/observations";
+    const PROXY = "https://api.codetabs.com/v1/proxy/?quest=";
+
+
+    const series = [
+      { label: "1M", id: "DGS1MO", months: 1 },
+      { label: "3M", id: "DGS3MO", months: 3 },
+      { label: "6M", id: "DGS6MO", months: 6 },
+      { label: "1Y", id: "DGS1", months: 12 },
+      { label: "2Y", id: "DGS2", months: 24 },
+      { label: "3Y", id: "DGS3", months: 36 },
+      { label: "5Y", id: "DGS5", months: 60 },
+      { label: "7Y", id: "DGS7", months: 84 },
+      { label: "10Y", id: "DGS10", months: 120 }
+    ];
+
+    async function fetchFRED(seriesId) {
+      const url = `${FRED_BASE}?series_id=${seriesId}&api_key=${FRED_API_KEY}&file_type=json&sort_order=desc&limit=1`;
+      const response = await fetch(PROXY + encodeURIComponent(url));
+      const data = await response.json();
+      return JSON.parse(data.contents);
+    }
+
+    async function fetchAllYields() {
+      const results = [];
+      let latestDate = null;
+
+      for (const s of series) {
+        try {
+          const data = await fetchFRED(s.id);
+          const obs = data.observations.find(o => o.value !== "." && !isNaN(parseFloat(o.value)));
+          const value = parseFloat(obs.value);
+          const date = obs.date;
+          if (!isNaN(value)) {
+            results.push({ label: s.label, months: s.months, yield: value });
+            if (!latestDate) latestDate = date;
+          }
+        } catch (err) {
+          console.warn(`Failed to fetch ${s.label}:`, err);
+        }
+      }
+      return { results, latestDate };
+    }
+
+    async function drawYieldCurve() {
+      const { results: yields, latestDate } = await fetchAllYields();
+      const ctx = document.getElementById("yieldCurveChart").getContext("2d");
+      const dateInfoEl = document.getElementById("dateInfo");
+
+      yields.sort((a, b) => a.months - b.months);
+      dateInfoEl.textContent = `As of ${new Date(latestDate).toLocaleDateString("en-US", {
+        year: "numeric", month: "long", day: "numeric"
+      })}`;
+
+      const tickValues = series.map(s => s.months);
+      const tickLabels = series.map(s => s.label);
+
+      new Chart(ctx, {
+        type: "line",
+        data: {
+          datasets: [{
+            label: "Yield (%)",
+            data: yields.map(d => ({ x: d.months, y: d.yield })),
+            borderColor: "#1f77b4",
+            backgroundColor: "rgba(31,119,180,0.15)",
+            tension: 0.3,
+            pointRadius: 6,
+            pointHoverRadius: 8,
+            pointBackgroundColor: "#1f77b4"
+          }]
+        },
+        options: {
+          scales: {
+            x: {
+              type: "linear",
+              title: { display: true, text: "Maturity" },
+              min: 0,
+              max: 130,
+              ticks: {
+                values: tickValues,
+                callback: function(value) {
+                  const i = tickValues.indexOf(value);
+                  return i !== -1 ? tickLabels[i] : "";
+                },
+                autoSkip: false
+              },
+              grid: { drawTicks: false }
+            },
+            y: {
+              title: { display: true, text: "Yield (%)" },
+              beginAtZero: false,
+              grid: { color: "rgba(0,0,0,0.1)" }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: (ctx) => `Maturity: ${ctx[0].raw.x} months`,
+                label: (ctx) => `Yield: ${ctx.raw.y}%`
+              }
+            }
+          }
+        }
+      });
+    }
+
+    drawYieldCurve();
+  </script>
+</body>
+</html>
